@@ -85,6 +85,7 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
 
+//获取sds保存字符串长度
 static inline size_t sdslen(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -102,6 +103,7 @@ static inline size_t sdslen(const sds s) {
     return 0;
 }
 
+//获取sds剩余可用长度
 static inline size_t sdsavail(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -128,6 +130,7 @@ static inline size_t sdsavail(const sds s) {
     return 0;
 }
 
+//设置sds长度位
 static inline void sdssetlen(sds s, size_t newlen) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -152,6 +155,7 @@ static inline void sdssetlen(sds s, size_t newlen) {
     }
 }
 
+//sds增加指定长度位
 static inline void sdsinclen(sds s, size_t inc) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -177,7 +181,9 @@ static inline void sdsinclen(sds s, size_t inc) {
     }
 }
 
+//申请空间大小 = 剩余可用大小 + 已用空间大写  len代表已用长度  alloc代表申请总长度
 /* sdsalloc() = sdsavail() + sdslen() */
+//获取sds申请总大小
 static inline size_t sdsalloc(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -195,6 +201,7 @@ static inline size_t sdsalloc(const sds s) {
     return 0;
 }
 
+//设置sds申请总大小
 static inline void sdssetalloc(sds s, size_t newlen) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
