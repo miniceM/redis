@@ -31,3 +31,4 @@ Makefile.dep
 .vscode/*
 src/sds.c.bak
 src/sds.h.bak
+*.bak
