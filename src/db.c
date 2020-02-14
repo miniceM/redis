@@ -37,12 +37,15 @@
 /*-----------------------------------------------------------------------------
  * C-level DB API
  *----------------------------------------------------------------------------*/
-
+// key过期检查方法声明
 int keyIsExpired(redisDb *db, robj *key);
 
 /* Update LFU when an object is accessed.
  * Firstly, decrement the counter if the decrement time is reached.
  * Then logarithmically increment the counter, and update the access time. */
+// 在访问对象时更新LFU
+// 首先，如果计数器达到衰减时间，则对计数器进行衰减。
+// 然后对数递增计数器，更新访问时间
 void updateLFU(robj *val) {
     unsigned long counter = LFUDecrAndReturn(val);
     counter = LFULogIncr(counter);
@@ -52,14 +55,16 @@ void updateLFU(robj *val) {
 /* Low level key lookup API, not actually called directly from commands
  * implementations that should instead rely on lookupKeyRead(),
  * lookupKeyWrite() and lookupKeyReadWithFlags(). */
+// 从数据库 db 中取出键 key 的值（对象） 
 robj *lookupKey(redisDb *db, robj *key, int flags) {
-    dictEntry *de = dictFind(db->dict,key->ptr);
+    dictEntry *de = dictFind(db->dict,key->ptr);                      // 查找键空间
     if (de) {
-        robj *val = dictGetVal(de);
+        robj *val = dictGetVal(de);                                   // 取出值
 
         /* Update the access time for the ageing algorithm.
          * Don't do it if we have a saving child, as this will trigger
          * a copy on write madness. */
+        // 更新老化算法的时间信息（只在不存在子进程时执行，防止破坏 copy-on-write 机制） 
         if (!hasActiveChildProcess() && !(flags & LOOKUP_NOTOUCH)){
             if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
                 updateLFU(val);
@@ -75,20 +80,26 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
 
 /* Lookup a key for read operations, or return NULL if the key is not found
  * in the specified DB.
+ * 为执行读取操作而取出键 key 在数据库 db 中的值。
  *
  * As a side effect of calling this function:
  * 1. A key gets expired if it reached it's TTL.
  * 2. The key last access time is updated.
  * 3. The global keys hits/misses stats are updated (reported in INFO).
  * 4. If keyspace notifications are enabled, a "keymiss" notification is fired.
+ * 调用这个方法后：
+ * 1. 如果到达TTL，则密钥过期
+ * 2. 更新key的最后访问时间
+ * 3. 更新全局的命中/丢失信息
+ * 4. 如果开始通知，将会触发“未命中”通知
  *
  * This API should not be used when we write to the key after obtaining
  * the object linked to the key, but only for read only operations.
  *
  * Flags change the behavior of this command:
  *
- *  LOOKUP_NONE (or zero): no special flags are passed.
- *  LOOKUP_NOTOUCH: don't alter the last access time of the key.
+ *  LOOKUP_NONE (or zero): no special flags are passed.  什么都不做
+ *  LOOKUP_NOTOUCH: don't alter the last access time of the key.   不更新最后访问时间
  *
  * Note: this function also returns NULL if the key is logically expired
  * but still existing, in case this is a slave, since this API is called only
@@ -174,41 +185,44 @@ robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply) {
 
 /* Add the key to the DB. It's up to the caller to increment the reference
  * counter of the value if needed.
+ * 尝试将键值对 key 和 val 添加到数据库中。调用者负责对 key 和 val 的引用计数进行增加。
  *
- * The program is aborted if the key already exists. */
+ * The program is aborted if the key already exists. 程序在键已经存在时会停止。 */
 void dbAdd(redisDb *db, robj *key, robj *val) {
-    sds copy = sdsdup(key->ptr);
-    int retval = dictAdd(db->dict, copy, val);
+    sds copy = sdsdup(key->ptr);                                   // 复制键名
+    int retval = dictAdd(db->dict, copy, val);                     // 尝试添加键值对
 
-    serverAssertWithInfo(NULL,key,retval == DICT_OK);
+    serverAssertWithInfo(NULL,key,retval == DICT_OK);              // 如果键已经存在，那么停止
     if (val->type == OBJ_LIST ||
         val->type == OBJ_ZSET)
-        signalKeyAsReady(db, key);
-    if (server.cluster_enabled) slotToKeyAdd(key);
+        signalKeyAsReady(db, key);                                 // 如果键值类型是list或set，标记key为ready
+    if (server.cluster_enabled) slotToKeyAdd(key);                 // 如果开启了集群模式，那么将键保存到槽里面
 }
 
 /* Overwrite an existing key with a new value. Incrementing the reference
  * count of the new value is up to the caller.
+ * 为已存在的键关联一个新值。调用者负责对新值 val 的引用计数进行增加。
  * This function does not modify the expire time of the existing key.
+ * 这个函数不会修改键的过期时间。
  *
  * The program is aborted if the key was not already present. */
 void dbOverwrite(redisDb *db, robj *key, robj *val) {
-    dictEntry *de = dictFind(db->dict,key->ptr);
+    dictEntry *de = dictFind(db->dict,key->ptr);           //查找键
 
-    serverAssertWithInfo(NULL,key,de != NULL);
+    serverAssertWithInfo(NULL,key,de != NULL);             // 节点必须存在，否则中止
     dictEntry auxentry = *de;
-    robj *old = dictGetVal(de);
-    if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
-        val->lru = old->lru;
+    robj *old = dictGetVal(de);                            // 获取旧值
+    if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {    
+        val->lru = old->lru;                               // 新值的lru赋值
     }
-    dictSetVal(db->dict, de, val);
+    dictSetVal(db->dict, de, val);                         // 覆盖旧值
 
-    if (server.lazyfree_lazy_server_del) {
+    if (server.lazyfree_lazy_server_del) {                 // 根据懒释放配置选择异步延迟释放旧值
         freeObjAsync(old);
         dictSetVal(db->dict, &auxentry, NULL);
     }
 
-    dictFreeVal(db->dict, &auxentry);
+    dictFreeVal(db->dict, &auxentry);                      // 释放旧值
 }
 
 /* High level Set operation. This function can be used in order to set
@@ -230,12 +244,14 @@ void setKey(redisDb *db, robj *key, robj *val) {
     signalModifiedKey(db,key);
 }
 
+// 检查键 key 是否存在于数据库中，存在返回 1 ，不存在返回 0
 int dbExists(redisDb *db, robj *key) {
     return dictFind(db->dict,key->ptr) != NULL;
 }
 
 /* Return a random key, in form of a Redis object.
  * If there are no keys, NULL is returned.
+ * 随机从数据库中取出一个键，并以字符串对象的方式返回这个键
  *
  * The function makes sure to return keys not already expired. */
 robj *dbRandomKey(redisDb *db) {
@@ -288,6 +304,7 @@ int dbSyncDelete(redisDb *db, robj *key) {
 
 /* This is a wrapper whose behavior depends on the Redis lazy free
  * configuration. Deletes the key synchronously or asynchronously. */
+// 根据redis惰性释放配置，决定怎么释放key，同步还是异步 
 int dbDelete(redisDb *db, robj *key) {
     return server.lazyfree_lazy_server_del ? dbAsyncDelete(db,key) :
                                              dbSyncDelete(db,key);
@@ -334,9 +351,11 @@ robj *dbUnshareStringValue(redisDb *db, robj *key, robj *o) {
 /* Remove all keys from all the databases in a Redis server.
  * If callback is given the function is called from time to time to
  * signal that work is in progress.
+ * 删除Redis 服务端 所有数据库里面的所有key
  *
  * The dbnum can be -1 if all the DBs should be flushed, or the specified
  * DB number if we want to flush only a single Redis database number.
+ * dbnum为-1 表示清空所有数据库，或者可以指定dsnum 清空某一个数据库
  *
  * Flags are be EMPTYDB_NO_FLAGS if no special flags are specified or
  * EMPTYDB_ASYNC if we want the memory to be freed in a different thread
@@ -404,9 +423,11 @@ long long emptyDb(int dbnum, int flags, void(callback)(void*)) {
     return emptyDbGeneric(server.db, dbnum, flags, callback);
 }
 
+// 将客户端的目标数据库切换为 id 所指定的数据库
 int selectDb(client *c, int id) {
     if (id < 0 || id >= server.dbnum)
         return C_ERR;
+    // 切换数据库 （更新指针）    
     c->db = &server.db[id];
     return C_OK;
 }
@@ -558,14 +579,17 @@ void existsCommand(client *c) {
 void selectCommand(client *c) {
     long id;
 
+		// 不合法的数据库号码
     if (getLongFromObjectOrReply(c, c->argv[1], &id,
         "invalid DB index") != C_OK)
         return;
 
+		// 集群模式不允许切换数据库
     if (server.cluster_enabled && id != 0) {
         addReplyError(c,"SELECT is not allowed in cluster mode");
         return;
     }
+    // 切换数据库
     if (selectDb(c,id) == C_ERR) {
         addReplyError(c,"DB index is out of range");
     } else {

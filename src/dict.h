@@ -45,46 +45,49 @@
 #define DICT_NOTUSED(V) ((void) V)
 
 typedef struct dictEntry {
-    void *key;
+    void *key;                                      //键
     union {
         void *val;
         uint64_t u64;
         int64_t s64;
         double d;
-    } v;
-    struct dictEntry *next;
+    } v;                                           //值，可以是指针， 或者是uint64_t 整数， 又或者是int64_t 整数，或者double
+    struct dictEntry *next;                        //指向下个哈希表节点，形成链表
 } dictEntry;
 
+//每个 dictType 结构保存了一簇用于操作特定类型键值对的函数， Redis 为用途不同的字典设置不同的类型特定函数
 typedef struct dictType {
-    uint64_t (*hashFunction)(const void *key);
-    void *(*keyDup)(void *privdata, const void *key);
-    void *(*valDup)(void *privdata, const void *obj);
-    int (*keyCompare)(void *privdata, const void *key1, const void *key2);
-    void (*keyDestructor)(void *privdata, void *key);
-    void (*valDestructor)(void *privdata, void *obj);
+    uint64_t (*hashFunction)(const void *key);                                    // 计算哈希值的函数
+    void *(*keyDup)(void *privdata, const void *key);                             // 复制键的函数
+    void *(*valDup)(void *privdata, const void *obj);                             // 复制值的函数
+    int (*keyCompare)(void *privdata, const void *key1, const void *key2);        // 对比键的函数
+    void (*keyDestructor)(void *privdata, void *key);                             // 销毁键的函数
+    void (*valDestructor)(void *privdata, void *obj);                             // 销毁值的函数
 } dictType;
 
 /* This is our hash table structure. Every dictionary has two of this as we
  * implement incremental rehashing, for the old to the new table. */
+//哈希表结构，每个字典都有2个，用来实现表的增量rehash 
 typedef struct dictht {
-    dictEntry **table;
-    unsigned long size;
-    unsigned long sizemask;
-    unsigned long used;
+    dictEntry **table;                                                           //哈希表节点数组
+    unsigned long size;                                                          // 哈希表大小
+    unsigned long sizemask;                                                      // 哈希表大小掩码，用于计算索引值, = size-1
+    unsigned long used;                                                          // 该哈希表已有节点的数量
 } dictht;
 
 typedef struct dict {
-    dictType *type;
-    void *privdata;
-    dictht ht[2];
-    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
-    unsigned long iterators; /* number of iterators currently running */
+    dictType *type;                                                              //类型特定函数簇
+    void *privdata;                                                              //私有数据
+    dictht ht[2];                                                                //哈希表
+    long rehashidx; /* rehashing not in progress if rehashidx == -1 */           //rehash 索引
+    unsigned long iterators; /* number of iterators currently running */         //用于记录当前使用的安全迭代器数量，与rehashing操作有关
 } dict;
 
 /* If safe is set to 1 this is a safe iterator, that means, you can call
  * dictAdd, dictFind, and other functions against the dictionary even while
  * iterating. Otherwise it is a non safe iterator, and only dictNext()
  * should be called while iterating. */
+//迭代器 
 typedef struct dictIterator {
     dict *d;
     long index;

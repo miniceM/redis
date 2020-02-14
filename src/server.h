@@ -84,6 +84,7 @@ typedef long long ustime_t; /* microsecond time type. */
 #define C_ERR                   -1
 
 /* Static server configuration */
+/* 默认的服务器配置值 */
 #define CONFIG_DEFAULT_HZ        10             /* Time interrupt calls/sec. */
 #define CONFIG_MIN_HZ            1
 #define CONFIG_MAX_HZ            500
@@ -624,15 +625,15 @@ typedef struct clientReplyBlock {
  * by integers from 0 (the default database) up to the max configured
  * database. The database number is the 'id' field in the structure. */
 typedef struct redisDb {
-    dict *dict;                 /* The keyspace for this DB */
-    dict *expires;              /* Timeout of keys with a timeout set */
-    dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
-    dict *ready_keys;           /* Blocked keys that received a PUSH */
-    dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
-    int id;                     /* Database ID */
-    long long avg_ttl;          /* Average TTL, just for stats */
-    unsigned long expires_cursor; /* Cursor of the active expire cycle. */
-    list *defrag_later;         /* List of key names to attempt to defrag one by one, gradually. */
+    dict *dict;                 /* The keyspace for this DB */                           // 数据库键空间，保存着数据库中的所有键值对
+    dict *expires;              /* Timeout of keys with a timeout set */                 // 键的过期时间，字典的键为键，字典的值为过期事件 UNIX 时间戳
+    dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/          // 正处于阻塞状态的键
+    dict *ready_keys;           /* Blocked keys that received a PUSH */                  // 可以解除阻塞的键
+    dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */                    // 正在被 WATCH 命令监视的键
+    int id;                     /* Database ID */                                        // 数据库号码
+    long long avg_ttl;          /* Average TTL, just for stats */                        // 数据库的键的平均 TTL ，统计信息
+    unsigned long expires_cursor; /* Cursor of the active expire cycle. */               // 过期游标
+    list *defrag_later;         /* List of key names to attempt to defrag one by one, gradually. */   // defrag key序列
 } redisDb;
 
 /* Client MULTI/EXEC state */
